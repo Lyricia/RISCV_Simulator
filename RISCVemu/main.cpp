@@ -5,9 +5,14 @@
 
 int main() 
 {
-	elf_file e("data/hello.elf");
+	elf_file e("data/hello64.elf");
 
-	int total_inst_count = e.sections[1].size / 4;
+	int total_inst_count = -1;
+	for (auto& section : e.sections) {
+		if (section.name == ".text") {
+			total_inst_count = section.size / 4;
+		}
+	}
 	auto pc = (uint32_t*)(e.buf.data() + e.ehdr.e_entry);	// Start Program counter
 
 	

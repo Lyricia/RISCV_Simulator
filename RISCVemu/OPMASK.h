@@ -3,18 +3,21 @@
 #include <iomanip>
 #include <string>
 #include <bitset>
+#include <set>
+
+#define DEBUG true;
 
 constexpr int MASK_OP		= 0b00000000'00000000'00000000'01111111;
 constexpr int MASK_REG_IMM	= 0b00000000'00000000'00000000'00011111;
 constexpr int MASK_FUNCT2	= 0b00000000'00000000'00000000'00000011;
 constexpr int MASK_FUNCT3	= 0b00000000'00000000'00000000'00000111;
 constexpr int MASK_FUNCT7	= 0b00000000'00000000'00000000'01111111;
-constexpr int MASK_IMM11	= 0b00000000'00000000'00000111'11111111;
+constexpr int MASK_IMM12	= 0b00000000'00000000'00001111'11111111;
 constexpr int MASK_IMM20	= 0b00000000'00001111'11111111'11111111;
 constexpr int MASK_AQ_RL	= 0b00000000'00000000'00000000'00000001;
 constexpr int MASK_ATOMIC	= 0b00000000'00000000'00000000'00011111;
 
-void Decode_R(int inst);
+std::set<std::string> collector;
 
 enum inst_type {
 	R_TYPE,
@@ -27,127 +30,51 @@ enum inst_type {
 	NOTDEFINED
 };
 
-struct INST_DATA {
-	int opcode;
-	int rd;
-	int funct3;
-	int rs1;
-	int rs2;
-	int funct7;
-	int aq;
-	int rl;
+struct decode
+{
+	std::string op;
+	uint32_t opcode;			/* (>256 entries) nearly full */
+
+	uint32_t rd;			/* (5 bits) byte aligned for performance */
+	uint32_t rs1;			/* (5 bits) byte aligned for performance */
+	uint32_t rs2;			/* (5 bits) byte aligned for performance */
+	uint32_t rs3;			/* (5 bits) byte aligned for performance */
+
+	uint32_t imm;			/* decoded immediate */
+
+	uint32_t codec;			/* (>32 entries) can grow */
+	uint32_t rm;			/* round mode for some FPU ops */
+	uint32_t aq;			/* acquire for atomic ops */
+	uint32_t rl;			/* release for atomic ops */
+	uint32_t pred;			/* pred for fence */
+	uint32_t succ;			/* succ for fence */
 };
 
-void Inst_Decode(uint32_t inst) 
+void int_to_bin_digit(unsigned int in, int count, int* out)
 {
-	inst_type type;
-	switch (inst&MASK_OP)
-	{
-	case 0b0'0110111:
-	case 0b0'0010111:
-		type = U_TYPE;
-		break;
-
-	case 0b0'1101111:
-		type = J_TYPE;
-		break;
-
-
-	case 0b0'1100011:
-		type = B_TYPE;
-		break;
-
-	case 0b0'0100011:
-	case 0b0'0100111:
-		type = S_TYPE;
-		break;
-
-	case 0b0'0001111:		// FENCE
-		type = NOTDEFINED;
-		break;
-
-	case 0b0'0000111:
-	case 0b0'1100111:
-	case 0b0'0000011:
-		type = I_TYPE;
-		break;
-
-	case 0b0'0010011: {
-		type = I_TYPE;
-		int funct3 = (inst >> 12) & MASK_FUNCT3;
-		switch (funct3) {
-		case 0b001:
-		case 0b101:
-			break;
-		default:
-			break;
-		}
-		break; 
-	}
-
-	case 0b0'1110011:		// ECALL
-		if ((inst >> 7) == 0)
-			type = NOTDEFINED;
-		else
-			type = I_TYPE;
-		break;
-
-	case 0b0'0011011:
-	{
-		type = I_TYPE;
-		int funct3 = (inst >> 12) & MASK_FUNCT3;
-		switch (funct3) {
-		case 0b001:
-		case 0b101:
-			break;
-		default:
-			break;
-		}
-		break;
-	}
-
-	case 0b0'0110011:	
-	case 0b0'0111011:	
-	case 0b0'0101111:	
-	case 0b0'1010011:	
-		type = R_TYPE;	Decode_R(inst);	break;
-
-	case 0b0'1000011:
-	case 0b0'1000111:
-	case 0b0'1001011:
-	case 0b0'1001111:
-		type = R4_TYPE;
-		break;
-
-
-
-	default:
-		std::cout << "unknown opcode " << std::bitset<32>(inst) << std::endl;
-		break;
+	/* assert: count <= sizeof(int)*CHAR_BIT */
+	unsigned int mask = 1U << (count - 1);
+	int i;
+	for (i = 0; i < count; i++) {
+		out[i] = (in & mask) ? 1 : 0;
+		in <<= 1;
 	}
 }
 
-//R_TYPE==
-//R4_TYPE==
-//I_TYPE
-//S_TYPE==
-//B_TYPE==
-//U_TYPE==
-//J_TYPE==
-//NOTDEFINED
-
-void Decode_R(int inst) {
+decode Decode_R(int inst) {
+	decode d;
 	std::string op;
-	int opcode	= (inst&MASK_OP);
-	int rd		= (inst >> 7) & MASK_REG_IMM;
-	int funct3	= (inst >> 12) & MASK_FUNCT3;
-	int rs1		= (inst >> 15) & MASK_REG_IMM;
-	int rs2		= (inst >> 20) & MASK_REG_IMM;
-	int funct7	= (inst >> 25) & MASK_FUNCT7;
-	int aq		= (inst >> 25) & MASK_AQ_RL;
-	int rl		= (inst >> 26) & MASK_AQ_RL;
+	d.opcode	= (inst&MASK_OP);
+	d.rd		= (inst >> 7) & MASK_REG_IMM;
+	d.rs1		= (inst >> 15) & MASK_REG_IMM;
+	d.rs2		= (inst >> 20) & MASK_REG_IMM;
+	d.aq		= (inst >> 25) & MASK_AQ_RL;
+	d.rl		= (inst >> 26) & MASK_AQ_RL;
 
-	switch (opcode) {
+	int funct3	= (inst >> 12) & MASK_FUNCT3;
+	int funct7	= (inst >> 25) & MASK_FUNCT7;
+
+	switch (d.opcode) {
 	case 0b0'0110011:
 	{
 		switch (funct3) {
@@ -259,7 +186,7 @@ void Decode_R(int inst) {
 		};
 		case 0b0'1100000:
 		{
-			switch (rs2) {
+			switch (d.rs2) {
 			case 0b0'00000:	op = "FCVT_W_S";	break;
 			case 0b0'00001:	op = "FCVT_WU_S";	break;
 			case 0b0'00010:	op = "FCVT_L_S";	break;
@@ -285,7 +212,7 @@ void Decode_R(int inst) {
 		}
 		case 0b0'1101000:
 		{
-			switch (rs2) {
+			switch (d.rs2) {
 			case 0b0'00000:	op = "FCVT_S_W";	break;
 			case 0b0'00001:	op = "FCVT_S_WU";	break; 
 			case 0b0'00010:	op = "FCVT_S_L";	break;
@@ -295,6 +222,7 @@ void Decode_R(int inst) {
 		}
 		case 0b0'1111000:	op = "FMV_W_X"; break;
 //////////////////////////////////////////////////////////
+
 		case 0b0'0000001:	op = "FADD_D";	break;
 		case 0b0'0000101:	op = "FSUB_D";	break;
 		case 0b0'0001001:	op = "FMUL_D";	break;
@@ -322,7 +250,7 @@ void Decode_R(int inst) {
 
 		case 0b0'1100001:
 		{
-			switch (rs2) {
+			switch (d.rs2) {
 			case 0b0'00000:	op = "FCVT_W_D";	break;
 			case 0b0'00001:	op = "FCVT_WU_D";	break;
 			case 0b0'00010:	op = "FCVT_L_D";	break;
@@ -348,7 +276,7 @@ void Decode_R(int inst) {
 		}
 		case 0b0'1101001:
 		{
-			switch (rs2) {
+			switch (d.rs2) {
 			case 0b0'00000:	op = "FCVT_D_W";	break;
 			case 0b0'00001:	op = "FCVT_D_WU";	break;
 			case 0b0'00010:	op = "FCVT_D_L";	break;
@@ -363,47 +291,93 @@ void Decode_R(int inst) {
 
 		
 	default:
-		op = std::to_string(opcode);
+		op = std::to_string(d.opcode);
 		while (true);
 		break;
 	}
+
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	d.op = op;
+	return d;
+
 	//std::cout << std::setw(10) << op << std::setw(5) << rd << std::setw(5) << rs1 << std::setw(5) << rs2 << std::endl;
 }
 
-void Decode_U(int inst) 
+decode Decode_U(int inst) 
 {
+	
+	decode d;
 	std::string op;
-	int opcode = (inst&MASK_OP);
-	int rd = (inst >> 7) & MASK_REG_IMM;
-	int imm = (inst >> 12) & MASK_IMM20;
+	d.opcode = (inst&MASK_OP);
+	d.rd = (inst >> 7) & MASK_REG_IMM;
+	d.imm = (inst >> 12) & MASK_IMM20;
 
-	switch (opcode) {
+	switch (d.opcode) {
 	case 0b0'0110111:	op = "LUI";		break;
 	case 0b0'0010111:	op = "AUIPC";	break;
 	}
+
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	d.op = op;
+	return d;
 }
 
-void Decode_J(int inst)
+decode Decode_J(int inst)
 {
+	decode d;
 	std::string op;
-	int opcode = (inst&MASK_OP);
-	int rd = (inst >> 7) & MASK_REG_IMM;
+	d.opcode = (inst&MASK_OP);
+	d.rd = (inst >> 7) & MASK_REG_IMM;
 	int imm = (inst >> 12) & MASK_IMM20;
+	int imm20 = (inst >> 31) & 0b0'1;
+	int imm11 = (inst >> 20) & 0b0'1;
+	int imm19_12 = (inst >> 12) & 0b0'11111111;
+	int imm10_1 = (inst >> 21) & 0b0'1111111111;
+	d.imm =
+		(imm10_1 << 1)	|
+		(imm11 << 11)	|
+		(imm19_12 << 12) |
+		(imm20 << 20);
 
-	switch (opcode) {
+	switch (d.opcode) {
 	case 0b0'1101111:	op = "JAL";		break;
 	}
+
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	d.op = op;
+	return d;
 }
 
-void Decode_B(int inst)				//branch
+decode Decode_B(int inst)				//branch
 {
+	decode d;
 	std::string op;
-	int opcode = (inst&MASK_OP);
-	int imm1 = (inst >> 7) & MASK_REG_IMM;
+	d.opcode = (inst&MASK_OP);
+	d.rs1 = (inst >> 15) & MASK_REG_IMM;
+	d.rs2 = (inst >> 20) & MASK_REG_IMM;
+
 	int funct3 = (inst >> 12) & MASK_FUNCT3;
-	int rs1 = (inst >> 15) & MASK_REG_IMM;
-	int rs2 = (inst >> 20) & MASK_REG_IMM;
+	int imm1 = (inst >> 7) & MASK_REG_IMM;
 	int imm2 = (inst >> 25) & MASK_FUNCT7;
+
+	int imm12 = (imm2 >> 6) & 0b0'1;
+	int imm10_5 = imm2 & 0b0111111;
+	int imm4_1 = (imm1 >> 1) & 0b0111111;
+	int imm11 = imm1 & 0b0'1;
+	d.imm =
+		(imm4_1 << 1)	|
+		(imm10_5 << 5)	|
+		(imm11 << 11)	|
+		(imm12 << 12);
 
 	switch (funct3) {
 	case 0b0'000: op = "BEQ"; break;
@@ -416,16 +390,25 @@ void Decode_B(int inst)				//branch
 
 	// imm reordering
 
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	d.op = op;
+	return d;
+
 }
 
-void Decode_S(int inst) 
+decode Decode_S(int inst) 
 {
+	decode d;
 	std::string op;
-	int opcode = (inst&MASK_OP);
-	int imm1 = (inst >> 7) & MASK_REG_IMM;
+	d.opcode = (inst&MASK_OP);
+	d.rs1 = (inst >> 15) & MASK_REG_IMM;
+	d.rs2 = (inst >> 20) & MASK_REG_IMM;
+
 	int funct3 = (inst >> 12) & MASK_FUNCT3;
-	int rs1 = (inst >> 15) & MASK_REG_IMM;
-	int rs2 = (inst >> 20) & MASK_REG_IMM;
+	int imm1 = (inst >> 7) & MASK_REG_IMM;
 	int imm2 = (inst >> 25) & MASK_FUNCT7;
 
 	switch (funct3) 
@@ -436,20 +419,28 @@ void Decode_S(int inst)
 	case 0b0'011: op = "SD"; break;
 	}
 
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	d.op = op;
+	return d;
+
 }
 
-void Decode_R4(int inst)
+decode Decode_R4(int inst)
 {
+	decode d;
 	std::string op;
-	int opcode = (inst&MASK_OP);
-	int rd = (inst >> 7) & MASK_REG_IMM;
-	int rm = (inst >> 12) & MASK_FUNCT3;
-	int rs1 = (inst >> 15) & MASK_REG_IMM;
-	int rs2 = (inst >> 20) & MASK_REG_IMM;
-	int rs3 = (inst >> 27) & MASK_REG_IMM;
+	d.opcode = (inst&MASK_OP);
+	d.rd = (inst >> 7) & MASK_REG_IMM;
+	d.rm = (inst >> 12) & MASK_FUNCT3;
+	d.rs1 = (inst >> 15) & MASK_REG_IMM;
+	d.rs2 = (inst >> 20) & MASK_REG_IMM;
+	d.rs3 = (inst >> 27) & MASK_REG_IMM;
 	int funct2 = (inst >> 25) & MASK_FUNCT2;
 
-	switch (opcode) {
+	switch (d.opcode) {
 	case 0b0'1000011:	op = "FMADD";	break;
 	case 0b0'1000111:	op = "FMSUB";	break;
 	case 0b0'1001011:	op = "FNMSUB";	break;
@@ -458,4 +449,174 @@ void Decode_R4(int inst)
 	if (funct2 == 0)	op += "_S";
 	else				op += "_D";
 
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	return d;
+
+}
+
+decode Decode_I(int inst) 
+{
+	decode d;
+	std::string op;
+	d.opcode = (inst&MASK_OP);
+	d.rd = (inst >> 7) & MASK_REG_IMM;
+	d.rs1 = (inst >> 15) & MASK_REG_IMM;
+	d.rs2 = (inst >> 20) & MASK_REG_IMM;
+	d.aq = (inst >> 25) & MASK_AQ_RL;
+	d.rl = (inst >> 26) & MASK_AQ_RL;
+	int funct3 = (inst >> 12) & MASK_FUNCT3;
+	int funct7 = (inst >> 25) & MASK_FUNCT7;
+
+	switch (d.opcode) {
+	case 0b0'0000111:	op = "FLW";			break;
+	case 0b0'1100111:	op = "JALR";		break;
+	case 0b0'0000011:
+	{
+		switch (funct3) {
+		case 0b0'000:	op = "LB";		break;
+		case 0b0'001:	op = "LH";		break;
+		case 0b0'010:	op = "LW";		break;
+		case 0b0'100:	op = "LBU";		break;
+		case 0b0'101:	op = "LHU";		break;
+		case 0b0'110:	op = "LWU";		break;
+		case 0b0'011:	op = "LD";		break;
+		}
+		break;
+	}
+
+	case 0b0'0010011:
+	{	
+		switch (funct3) {
+		case 0b0'001:	op = "SLLI";	break;
+		case 0b0'101:
+		{
+			if (funct7 == 0b0'0100000) { op = "SRLI";	break; }
+			else						 op = "SRAI";	break;
+		}
+		case 0b0'000:	op = "ADDI";	break;
+		case 0b0'010:	op = "SLTI";	break;
+		case 0b0'011:	op = "SLTIU";	break;
+		case 0b0'100:	op = "XORI";	break;
+		case 0b0'110:	op = "ORI";	break;
+		case 0b0'111:	op = "ANDI";	break;
+		}
+		break;
+	}
+
+	case 0b0'1110011:
+	{
+		switch (funct3) {
+		case 0b0'000:
+		{
+			if (((inst >> 20)&MASK_IMM12) == 0b0'0) {	
+				op = "ECALL";	break; 
+			}
+			else										
+				op = "EBREAK";	break;
+		}
+		case 0b0'001:	op = "CSRRW";		break;
+		case 0b0'010:	op = "CSRRS";		break;
+		case 0b0'011:	op = "CSRRC";		break;
+		case 0b0'101:	op = "CSRRWI";		break;
+		case 0b0'110:	op = "CSRRSI";		break;
+		case 0b0'111:	op = "CSRRCI";		break;
+		}
+		break;
+	}
+	case 0b0'0011011: {
+		switch (funct3) {
+		case 0b0'000:	op = "ADDIW";		break;
+		case 0b0'001:	op = "SLLIW";		break;
+		case 0b0'101: {
+			if (funct7 == 0b0'0000000) {
+				op = "SRLIW";		break;
+			}
+			else
+				op = "SRAIW";		break;
+		}
+		}
+		break;
+	}
+
+	}
+
+#ifdef DEBUG
+	if (op == "")		while (true);
+#endif
+
+	d.op = op;
+	return d;
+
+}
+
+void Inst_Decode(uint32_t inst)
+{
+	decode d;
+	inst_type type;
+	switch (inst&MASK_OP)
+	{
+	case 0b0'0110111:
+	case 0b0'0010111:
+		type = U_TYPE;
+		d = Decode_U(inst);
+		break;
+
+	case 0b0'1101111:
+		type = J_TYPE;
+		d = Decode_J(inst);
+		break;
+
+
+	case 0b0'1100011:
+		type = B_TYPE;
+		d = Decode_B(inst);
+		break;
+
+	case 0b0'0100011:
+	case 0b0'0100111:
+		type = S_TYPE;
+		d = Decode_S(inst);
+		break;
+
+	case 0b0'0001111:		// FENCE
+		type = NOTDEFINED;
+		break;
+
+	case 0b0'0000111:
+	case 0b0'1100111:
+	case 0b0'0000011:
+	case 0b0'0010011:
+	case 0b0'0011011:
+	case 0b0'1110011:
+		type = I_TYPE;
+		d = Decode_I(inst);
+		break;
+
+	case 0b0'0110011:
+	case 0b0'0111011:
+	case 0b0'0101111:
+	case 0b0'1010011:
+		type = R_TYPE;
+		d = Decode_R(inst);
+		break;
+
+	case 0b0'1000011:
+	case 0b0'1000111:
+	case 0b0'1001011:
+	case 0b0'1001111:
+		type = R4_TYPE;
+		d = Decode_R4(inst);
+		break;
+
+	default:
+
+		std::cout << "unknown opcode " << std::bitset<7>(inst&MASK_OP) << std::endl;
+		break;
+	}
+
+	if(type == R_TYPE)
+		std::cout << std::setw(10) << d.op << std::setw(5) << d.rd << std::setw(5) << d.rs1 << std::setw(5) << d.rs2 << std::endl;;
 }
