@@ -150,6 +150,7 @@ void elf_file::load(std::string filename, elf_load load_type)
 {
 	FILE *file;
 	struct stat stat_buf;
+	std::vector<uint8_t> buf;
 	std::vector<std::pair<size_t,size_t>> bounds;
 
 	// clear current data
@@ -173,9 +174,18 @@ void elf_file::load(std::string filename, elf_load load_type)
 		fclose(file);
 		panic("error invalid ELF file: %s", filename.c_str());
 	}
+
 	filesize = stat_buf.st_size;
+	fbuf.resize(filesize);
+	size_t bytes_read = fread(fbuf.data(), 1, filesize, file);
+	if (bytes_read != filesize) {
+		fclose(file);
+		panic("error read ELF file: %s", filename.c_str());
+	}
+
+	fseek(file, 0, SEEK_SET);
 	buf.resize(EI_NIDENT);
-	size_t bytes_read = fread(buf.data(), 1, EI_NIDENT, file);
+	bytes_read = fread(buf.data(), 1, EI_NIDENT, file);
 	if (bytes_read != EI_NIDENT || !elf_check_magic(buf.data())) {
 		fclose(file);
 		panic("error invalid ELF magic: %s", filename.c_str());
@@ -364,7 +374,7 @@ void elf_file::load(std::string filename, elf_load load_type)
 		bounds.push_back(std::pair<size_t,size_t>(shdrs[i].sh_offset, section_end));
 	}
 	fclose(file);
-	buf.resize(0);
+	//buf.resize(0);
 
 	// byteswap symbol table
 	byteswap_symbol_table(ELFENDIAN_HOST);

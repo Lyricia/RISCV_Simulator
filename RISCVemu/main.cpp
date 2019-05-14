@@ -5,21 +5,25 @@
 
 int main() 
 {
-	elf_file e("data/hello64.elf");
+	elf_file e("data/hello.elf");
+	uint32_t* inst_buf = nullptr;
 
 	int total_inst_count = -1;
 	for (auto& section : e.sections) {
 		if (section.name == ".text") {
 			total_inst_count = section.size / 4;
+			inst_buf = (uint32_t*)section.buf.data();
+		
+			break;
 		}
 	}
-	auto pc = (uint32_t*)(e.buf.data() + e.ehdr.e_entry);	// Start Program counter
 
-	
+	uint32_t pc = reinterpret_cast<uint32_t>(e.fbuf.data() + e.ehdr.e_entry);	// Start Program counter
 
 	for (int i = 0; i < total_inst_count; ++i) 
 	{
-		auto inst = ((uint32_t*)e.sections[1].buf.data())[i];
+		uint32_t inst = *reinterpret_cast<uint32_t*>(pc);
+		pc += 4;
 		Inst_Decode(inst);
 		//std::cout << std::bitset<32>(inst) << std::endl;
 	}

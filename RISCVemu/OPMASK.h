@@ -162,11 +162,11 @@ decode Decode_R(int inst) {
 	{
 		
 		switch (funct7) {
-		case 0b0'0000000:	op= "FADD_S";	break;
-		case 0b0'0000100:	op= "FSUB_S";	break;
-		case 0b0'0001000:	op= "FMUL_S";	break;
-		case 0b0'0001100:	op= "FDIV_S";	break;
-		case 0b0'0101100:	op= "FSQRT_S";	break;
+		case 0b0'0000000:	op = "FADD_S";	break;
+		case 0b0'0000100:	op = "FSUB_S";	break;
+		case 0b0'0001000:	op = "FMUL_S";	break;
+		case 0b0'0001100:	op = "FDIV_S";	break;
+		case 0b0'0101100:	op = "FSQRT_S";	break;
 		case 0b0'0010000:
 		{
 			switch (funct3) {
@@ -352,7 +352,7 @@ decode Decode_J(int inst)
 #ifdef DEBUG
 	if (op == "")		while (true);
 #endif
-
+	//140964
 	d.op = op;
 	return d;
 }
@@ -555,7 +555,7 @@ decode Decode_I(int inst)
 void Inst_Decode(uint32_t inst)
 {
 	decode d;
-	inst_type type;
+	inst_type type = inst_type::NOTDEFINED;
 	switch (inst&MASK_OP)
 	{
 	case 0b0'0110111:
@@ -617,6 +617,6 @@ void Inst_Decode(uint32_t inst)
 		break;
 	}
 
-	if(type == R_TYPE)
-		std::cout << std::setw(10) << d.op << std::setw(5) << d.rd << std::setw(5) << d.rs1 << std::setw(5) << d.rs2 << std::endl;;
+	//if(type == R_TYPE)
+	std::cout << std::setw(10) << d.op << std::setw(20) << d.rd << std::setw(20) << d.rs1 << std::setw(20) << d.rs2 << std::endl;;
 }

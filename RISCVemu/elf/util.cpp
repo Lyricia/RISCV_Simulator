@@ -68,6 +68,7 @@ void panic(const char* fmt, ...)
 	va_start(ap, fmt);
 	log_format(stderr, fmt, ap);
 	va_end(ap);
+	while (true);
 	exit(9);
 }
 

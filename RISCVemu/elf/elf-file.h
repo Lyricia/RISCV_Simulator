@@ -34,6 +34,7 @@ struct elf_file
 	size_t filesize;
 	int ei_class;
 	int ei_data;
+	std::vector<uint8_t> fbuf;
 
 	Elf64_Ehdr ehdr;
 	std::vector<Elf64_Phdr> phdrs;
@@ -43,7 +44,7 @@ struct elf_file
 	std::map<Elf64_Addr,size_t> addr_symbol_map;
 	std::map<const char*,size_t,cmp_str> name_symbol_map;
 	std::vector<elf_section> sections;
-	std::vector<uint8_t> buf;
+	//std::vector<uint8_t> buf;
 
 	size_t text;
 	size_t rela_text;
